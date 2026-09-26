@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#ffe3c7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="小鲸鱼吃token">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/whale-girl-eat.png">
+<title>小鲸鱼吃token</title>
+<style>
+  :root{
+    --bg1:#fff3e0; --bg2:#ffe3c7; --bg3:#ffd2b0;
+    --ink:#6b4a2f; --ink2:#a07b52; --accent:#4f9df0; --warn:#d95f3b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;}
+  body{
+    font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 45%,var(--bg3) 100%);
+    color:var(--ink);
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+    touch-action:manipulation;
+  }
+  #app{position:relative;height:100dvh;height:100svh;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;}
+
+  /* ---------- 背景 ---------- */
+  #glow{position:absolute;left:50%;top:42%;width:130vw;height:130vw;max-width:1000px;max-height:1000px;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(255,255,255,.8),rgba(255,255,255,0) 62%);z-index:0;pointer-events:none;}
+  #table{position:absolute;left:0;right:0;bottom:0;height:24%;background:linear-gradient(180deg,#e3b078,#c88f55 60%,#b07742);border-radius:50% 50% 0 0 / 34% 34% 0 0;box-shadow:inset 0 12px 20px rgba(0,0,0,.08),inset 0 -6px 12px rgba(0,0,0,.15);z-index:0;}
+
+  /* ---------- 顶部 HUD ---------- */
+  #hud{position:relative;z-index:5;padding:calc(env(safe-area-inset-top) + 8px) 12px 0;flex:0 0 auto;}
+  .hud-row{display:flex;align-items:center;gap:8px;}
+  .title{margin:0;flex:1 1 auto;font-size:clamp(15px,4.2vw,22px);font-weight:800;color:var(--ink);text-shadow:0 2px 0 rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .catch{flex:0 0 auto;background:rgba(255,255,255,.88);border-radius:999px;padding:4px 10px;font-size:clamp(12px,3.2vw,15px);font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.08);}
+  .catch b{color:var(--warn);font-size:1.15em;}
+  .meter{display:flex;align-items:center;gap:8px;margin-top:6px;background:rgba(255,255,255,.88);border-radius:999px;padding:5px 10px;box-shadow:0 2px 6px rgba(0,0,0,.08);}
+  .meter-track{flex:1 1 auto;height:12px;border-radius:999px;background:#ecdfc6;overflow:hidden;}
+  .meter-fill{height:100%;width:100%;border-radius:999px;background:linear-gradient(90deg,#fff8ea,#ffd98a);transition:width .2s linear;}
+  .meter-pct{flex:0 0 auto;font-size:clamp(11px,3vw,14px);font-weight:800;color:#8a6420;min-width:38px;text-align:right;}
+
+  /* ---------- 舞台：气泡在上、场景居中 ---------- */
+  #stage{position:relative;z-index:2;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.4vmin;padding:2vmin 0 calc(env(safe-area-inset-bottom) + 2vmin);}
+
+  /* 气泡：常驻占位（不遮 HUD、不跳布局），始终在角色头顶 */
+  .bubble{
+    flex:0 0 auto;min-height:2.6em;max-width:min(90vw,420px);
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    background:#fff;border:3px solid #3a3a3a;border-radius:16px;padding:8px 14px;
+    font-size:clamp(13px,3.6vw,18px);font-weight:700;color:#333;line-height:1.3;
+    box-shadow:0 6px 14px rgba(0,0,0,.14);position:relative;
+    transition:opacity .18s ease,transform .18s ease;
+  }
+  .bubble.hidden{opacity:0;transform:translateY(4px);}
+  .bubble::after{content:"";position:absolute;left:50%;bottom:-13px;margin-left:-8px;border:8px solid transparent;border-top-color:#3a3a3a;border-bottom:0;}
+  .bubble::before{content:"";position:absolute;left:50%;bottom:-8px;margin-left:-6px;border:6px solid transparent;border-top-color:#fff;border-bottom:0;}
+
+  /* ---------- 场景：正方形自适应，子元素用 cqw 等比跟随 ---------- */
+  #scene{position:relative;flex:0 1 auto;width:min(100vw - 6px,60dvh,560px);aspect-ratio:1/1;container-type:size;}
+  .character{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.2));}
+
+  /* 状态动作 */
+  .state-eating .character{animation:bob 1.3s ease-in-out infinite;}
+  .state-stopped .character{animation:none;transform:translateY(2%);}
+  .state-sneak-look .character{animation:glance .9s ease-in-out;transform:rotate(-5deg);}
+  .state-sneak-bite .character{animation:chomp .6s ease-in-out;transform:scale(1.1);}
+  .state-caught .character{animation:caughtShake .45s ease;}
+  .state-done .character{animation:none;transform:translateY(-2%) scale(1.02);}
+  #scene.bite .character{animation:bitePulse .35s ease;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6%)}}
+  @keyframes glance{0%,100%{transform:rotate(-5deg)}25%{transform:rotate(5deg) translateY(-1%)}50%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
+  @keyframes chomp{0%{transform:scale(1)}45%{transform:scale(1.14) rotate(-4deg)}70%{transform:scale(1.06) rotate(2deg)}100%{transform:scale(1)}}
+  @keyframes caughtShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-2.5%)}75%{transform:translateX(2.5%)}}
+  @keyframes bitePulse{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+
+  /* ---------- 大饭碗（token 碗） ---------- */
+  #bowl{position:absolute;left:50%;bottom:11cqw;transform:translateX(-50%);width:48cqw;height:27cqw;pointer-events:none;}
+  .bowl-rim{position:absolute;left:0;right:0;top:0;height:5cqw;border-radius:50%;background:linear-gradient(180deg,#fff,#dce5ef);box-shadow:0 1cqw 2cqw rgba(0,0,0,.14);}
+  .bowl-inner{position:absolute;left:1.6cqw;right:1.6cqw;top:3cqw;bottom:0;border-radius:3cqw 3cqw 11cqw 11cqw;background:radial-gradient(circle at 50% 30%,#fff,#e6ecf4);overflow:hidden;box-shadow:inset 0 -2cqw 3cqw rgba(0,0,0,.07),0 2cqw 4cqw rgba(0,0,0,.18);border-bottom:1.4cqw solid #c8d3e0;}
+  #bowl .rice{position:absolute;left:0;right:0;bottom:0;height:100%;background:linear-gradient(180deg,#fffdf4,#f8efd8 55%,#efe2c2);border-radius:50% 50% 0 0 / 70% 70% 0 0;transition:height .25s ease;}
+  #bowl .rice::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(214,196,150,.55) .3cqw,transparent .42cqw);background-size:3cqw 3cqw;border-radius:inherit;}
+  .bowl-label{position:absolute;top:-1.4cqw;left:50%;transform:translateX(-50%) rotate(-4deg);z-index:2;background:var(--accent);color:#fff;font-weight:800;letter-spacing:.4cqw;font-size:5cqw;padding:.8cqw 3.2cqw;border-radius:999px;box-shadow:0 1cqw 2cqw rgba(0,0,0,.22);white-space:nowrap;}
+  .steam{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);width:70%;height:16cqw;pointer-events:none;}
+  .steam span{position:absolute;bottom:0;width:4cqw;height:9cqw;border-radius:50%;background:rgba(255,255,255,.78);filter:blur(1cqw);animation:steamUp 2s ease-in-out infinite;opacity:0;}
+  .steam span:nth-child(1){left:20%;animation-delay:0s}
+  .steam span:nth-child(2){left:50%;margin-left:-2cqw;animation-delay:.7s}
+  .steam span:nth-child(3){left:74%;animation-delay:1.3s}
+  @keyframes steamUp{0%{transform:translateY(2cqw) scale(.7);opacity:0}25%{opacity:.85}100%{transform:translateY(-12cqw) scale(1.15);opacity:0}}
+  .state-caught #bowl,.state-done #bowl{display:none;}
+
+  /* ---------- 检讨书（小、靠下，露出脸） ---------- */
+  #paper{position:absolute;left:50%;bottom:6cqw;transform:translateX(-50%) rotate(-3deg);width:44cqw;background:#fffdf6;border:.9cqw solid #8a6a45;border-radius:1.6cqw;padding:2.6cqw 3cqw;box-shadow:0 3cqw 6cqw rgba(0,0,0,.22);display:none;text-align:center;z-index:3;}
+  #paper::after{content:"";position:absolute;right:-.9cqw;top:-.9cqw;width:7cqw;height:7cqw;background:linear-gradient(225deg,#fffdf6 45%,#d9c9a8 50%,#f5ecd6 55%);border-left:.6cqw solid #8a6a45;border-bottom:.6cqw solid #8a6a45;}
+  .state-caught #paper{display:block;animation:paperPop .3s ease;}
+  @keyframes paperPop{0%{transform:translateX(-50%) rotate(-3deg) scale(.6);opacity:0}100%{transform:translateX(-50%) rotate(-3deg) scale(1);opacity:1}}
+  .paper-title{font-size:3.2cqw;font-weight:800;color:#a0703c;letter-spacing:1.2cqw;margin-bottom:1cqw;}
+  .paper-main{font-size:5.4cqw;font-weight:900;color:#3a3a3a;line-height:1.3;font-family:"KaiTi","STKaiti","Microsoft YaHei",serif;}
+  .paper-sign{margin-top:1.4cqw;font-size:2.6cqw;color:#8a6a45;text-align:right;}
+
+  /* ---------- 偷吃小特效 ---------- */
+  #fx{position:absolute;left:50%;top:12%;width:0;height:0;z-index:4;pointer-events:none;}
+  #fx span{position:absolute;left:0;top:0;font-size:9cqw;display:none;}
+  .state-sneak-look #fx .drop{display:block;animation:dropPop .9s ease-in-out;}
+  .state-sneak-bite #fx .rice{display:block;animation:ricePop .6s ease-in-out;}
+  @keyframes dropPop{0%,100%{transform:translate(-6cqw,0) scale(1);opacity:0}25%{opacity:1}60%{opacity:1;transform:translate(-6cqw,-3cqw) scale(1.15)}}
+  @keyframes ricePop{0%{transform:translate(2cqw,0) scale(0) rotate(-20deg);opacity:0}40%{transform:translate(2cqw,-2cqw) scale(1.35) rotate(10deg);opacity:1}100%{transform:translate(2cqw,-6cqw) scale(1);opacity:0}}
+
+  .hint{margin:0;flex:0 0 auto;font-size:clamp(11px,3vw,14px);color:rgba(107,74,47,.75);text-align:center;}
+
+  /* ---------- 吃饱结算 ---------- */
+  .done-overlay{position:absolute;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;background:rgba(70,45,20,.3);padding:20px;}
+  .done-overlay.hidden{display:none;}
+  .done-card{background:#fff8ec;border:3px solid var(--ink);border-radius:20px;padding:22px 26px;text-align:center;box-shadow:0 12px 30px rgba(0,0,0,.28);max-width:min(86vw,420px);}
+  .done-text{font-size:clamp(20px,6vw,30px);font-weight:900;margin-bottom:6px;}
+  .done-sub{font-size:clamp(12px,3.4vw,15px);color:var(--ink2);margin-bottom:16px;}
+  .restart-btn{min-height:48px;font-size:clamp(15px,4.2vw,19px);font-weight:800;color:#fff;background:linear-gradient(180deg,#ffb35c,#f0923c);border:0;border-radius:999px;padding:12px 28px;cursor:pointer;box-shadow:0 5px 12px rgba(0,0,0,.2);}
+  .restart-btn:active{transform:scale(.96);}
+
+  .footer{position:relative;z-index:5;flex:0 0 auto;padding:2px 10px calc(env(safe-area-inset-bottom) + 4px);text-align:center;font-size:clamp(9px,2.4vw,11px);color:rgba(107,74,47,.7);}
+
+  /* ---------- 横屏 / 矮屏：压缩 HUD，缩小场景 ---------- */
+  @media (max-height:520px){
+    #hud{padding-top:calc(env(safe-area-inset-top) + 4px);}
+    .title{font-size:clamp(13px,3vw,18px);}
+    .meter{margin-top:3px;padding:3px 8px;}
+    .meter-track{height:9px;}
+    #stage{gap:1.2vmin;padding:1vmin 0 calc(env(safe-area-inset-bottom) + 1vmin);}
+    #scene{width:min(52vw,70dvh,420px);}
+    .bubble{min-height:2.1em;padding:5px 10px;}
+    .hint{display:none;}
+    .footer{display:none;}
+  }
+  /* ---------- 超窄屏 ---------- */
+  @media (max-width:340px){
+    .title{font-size:14px;}
+    #scene{width:min(100vw - 4px,58dvh);}
+  }
+</style>
+</head>
+<body>
+<div id="app" class="state-eating">
+  <div id="glow" aria-hidden="true"></div>
+
+  <header id="hud">
+    <div class="hud-row">
+      <h1 class="title">🐋 小鲸鱼吃token</h1>
+      <div class="catch">👮 抓包 <b id="catchCount">0</b></div>
+    </div>
+    <div class="meter">
+      <div class="meter-track"><div class="meter-fill" id="riceFill"></div></div>
+      <span class="meter-pct" id="ricePct">100%</span>
+    </div>
+  </header>
+
+  <main id="stage" aria-label="小鲸鱼在吃 token，点她可以阻止她偷吃">
+    <div id="bubble" class="bubble hidden"><span id="bubbleText"></span></div>
+
+    <div id="scene">
+      <img id="charImg" class="character" alt="吃 token 的小鲸鱼" draggable="false">
+      <div id="bowl" aria-hidden="true">
+        <span class="bowl-label">token</span>
+        <div class="bowl-rim"></div>
+        <div class="bowl-inner"><div class="rice" id="bowlRice"></div></div>
+        <div class="steam"><span></span><span></span><span></span></div>
+      </div>
+      <div id="paper" aria-hidden="true">
+        <div class="paper-title">检 讨 书</div>
+        <div class="paper-main">我再也不吃<br>你的token了！</div>
+        <div class="paper-sign">—— 吃token的大肥鱼</div>
+      </div>
+      <div id="fx" aria-hidden="true"><span class="drop">💧</span><span class="rice">🍚</span></div>
+    </div>
+
+    <p class="hint">点她 / 敲她 → 别让她偷吃 token</p>
+  </main>
+
+  <div id="table" aria-hidden="true"></div>
+  <div class="footer">非官方同人 · 素材来自社区鲸鱼娘表情包 · 与 DeepSeek 官方无关</div>
+
+  <div id="doneOverlay" class="done-overlay hidden">
+    <div class="done-card">
+      <div class="done-text">吃饱啦~ 🐋</div>
+      <div class="done-sub">token 被她吃光了！下次要看紧点哦</div>
+      <button id="restartBtn" class="restart-btn">🍚 再来一碗</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var app = $("#app"), scene = $("#scene"), charImg = $("#charImg");
+  var riceFill = $("#riceFill"), ricePct = $("#ricePct"), bowlRice = $("#bowlRice");
+  var catchCountEl = $("#catchCount"), bubble = $("#bubble"), bubbleText = $("#bubbleText");
+  var doneOverlay = $("#doneOverlay");
+
+  /* ---------- 姿势图（社区表情包 PNG） ---------- */
+  var POSES = { eating: "eat", stopped: "pout", "sneak-look": "sneak", "sneak-bite": "bite", caught: "caught", done: "eat" };
+  function setPose(state) {
+    var name = POSES[state] || "eat";
+    charImg.onerror = function () {
+      charImg.onerror = null;
+      if (name !== "eat") charImg.src = "assets/whale-girl-eat.png";
+    };
+    charImg.src = "assets/whale-girl-" + name + ".png";
+  }
+
+  /* ---------- 台词 ---------- */
+  var LINES = {
+    eating:   ["我去吃token，测完告诉我就行", "这碗token真香~", "我是吃token的大肥鱼！才不是！", "鱼片，你要不要也来一口？"],
+    stopped:  ["哼！你不让我吃！", "我、我只是在歇口气…", "看什么看，我又没偷吃！"],
+    sneak:    ["（左右张望）应该没人看着吧…", "（偷瞄）趁鱼片不注意…"],
+    caught:   ["呜哇！被抓到了！", "我、我真的只吃了一小口！", "都是这碗token先动手的！"],
+    innocent: ["我、我才没有偷吃…", "嗝…就一口，真的就一口！"],
+    done:     ["吃饱啦~测完告诉我就行！", "嗝~（我才没有吃胖）"]
+  };
+  var lastLine = {}, sayTimer = null;
+  function say(key, ms) {
+    ms = ms || 2400;
+    var arr = LINES[key];
+    if (!arr || !arr.length) return;
+    var idx = Math.floor(Math.random() * arr.length);
+    if (arr.length > 1 && idx === lastLine[key]) idx = (idx + 1) % arr.length;
+    lastLine[key] = idx;
+    bubbleText.textContent = arr[idx];
+    bubble.classList.remove("hidden");
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(function () { bubble.classList.add("hidden"); }, ms);
+  }
+
+  /* ---------- 状态机 ---------- */
+  var state = "eating", rice = 100, catchCount = 0;
+  var stoppedTimer = null, sneakTimer = null, tickTimer = null, seqTimer = null;
+  var caughtThisSneak = false, beforeSneak = null;
+
+  function setState(s) { state = s; app.className = "state-" + s; setPose(s); }
+  function randSneakDelay() { return 8000 + Math.random() * 6000; }
+
+  function scheduleSneak(delay) {
+    clearTimeout(sneakTimer);
+    sneakTimer = setTimeout(function () {
+      if (state === "eating" || state === "stopped") beginSneak();
+      else scheduleSneak(randSneakDelay());
+    }, delay);
+  }
+
+  function beginSneak() {
+    beforeSneak = state;
+    caughtThisSneak = false;
+    clearTimeout(stoppedTimer);
+    say("sneak", 1500);
+    setState("sneak-look");
+    seqTimer = setTimeout(function () {
+      if (state !== "sneak-look") return;
+      setState("sneak-bite");
+      seqTimer = setTimeout(function () {
+        if (caughtThisSneak) return;
+        addRice(-4);
+        pulseBite();
+        setState(beforeSneak);
+        if (beforeSneak === "stopped") stoppedTimer = setTimeout(backToEating, 3000);
+        say("innocent");
+        scheduleSneak(randSneakDelay());
+      }, 700);
+    }, 900);
+  }
+
+  function backToEating() { if (state === "stopped") setState("eating"); }
+
+  function pulseBite() {
+    scene.classList.remove("bite");
+    void scene.offsetWidth;
+    scene.classList.add("bite");
+    setTimeout(function () { scene.classList.remove("bite"); }, 380);
+  }
+
+  function buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms || 12); } catch (e) {} } }
+
+  function addRice(delta) {
+    rice = Math.max(0, Math.min(100, rice + delta));
+    updateMeter();
+    if (rice <= 0 && state !== "done") finish();
+  }
+  function updateMeter() {
+    riceFill.style.width = rice + "%";
+    if (bowlRice) bowlRice.style.height = rice + "%";
+    ricePct.textContent = Math.round(rice) + "%";
+  }
+
+  function startTicking() {
+    clearInterval(tickTimer);
+    tickTimer = setInterval(function () { if (state === "eating") addRice(-0.12); }, 100);
+  }
+
+  function finish() {
+    clearTimeout(stoppedTimer); clearTimeout(sneakTimer); clearTimeout(seqTimer); clearInterval(tickTimer);
+    setState("done");
+    say("done", 4000);
+    doneOverlay.classList.remove("hidden");
+    buzz(30);
+  }
+
+  function restart() {
+    clearTimeout(stoppedTimer); clearTimeout(sneakTimer); clearTimeout(seqTimer); clearInterval(tickTimer);
+    rice = 100; catchCount = 0; catchCountEl.textContent = "0";
+    doneOverlay.classList.add("hidden");
+    setState("eating");
+    updateMeter();
+    startTicking();
+    scheduleSneak(5000);
+    say("eating", 2000);
+  }
+
+  function handleTap() {
+    if (state === "done") return;
+    buzz(12);
+    if (state === "sneak-look" || state === "sneak-bite") {
+      caughtThisSneak = true;
+      clearTimeout(seqTimer); clearTimeout(stoppedTimer);
+      catchCount += 1; catchCountEl.textContent = catchCount;
+      setState("caught");
+      say("caught");
+      buzz(40);
+      seqTimer = setTimeout(function () {
+        setState("eating");
+        scheduleSneak(randSneakDelay());
+      }, 1500);
+      return;
+    }
+    if (state === "stopped") {
+      clearTimeout(stoppedTimer);
+      stoppedTimer = setTimeout(backToEating, 3000);
+      say("stopped", 1500);
+      return;
+    }
+    if (state === "eating") {
+      clearTimeout(stoppedTimer);
+      setState("stopped");
+      say("stopped");
+      stoppedTimer = setTimeout(backToEating, 3000);
+      return;
+    }
+  }
+
+  /* ---------- 事件 ---------- */
+  var stageEl = $("#stage");
+  app.addEventListener("pointerdown", function (e) { e.preventDefault(); handleTap(); });
+  app.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  window.addEventListener("keydown", function (e) { if (e.code === "Space") { e.preventDefault(); handleTap(); } });
+  $("#restartBtn").addEventListener("click", function (e) { e.stopPropagation(); restart(); });
+
+  /* ---------- 调试钩子（仅 ?debug=1） ---------- */
+  if (new URLSearchParams(location.search).has("debug")) {
+    window.__wgDebug = {
+      getState: function () { return state; },
+      getRice: function () { return rice; },
+      setRice: function (v) { addRice(v - rice); },
+      forceSneak: function () { if (state === "eating" || state === "stopped") beginSneak(); }
+    };
+  }
+
+  /* ---------- 启动 ---------- */
+  setState("eating");
+  updateMeter();
+  startTicking();
+  scheduleSneak(5000);
+  setTimeout(function () { say("eating", 2200); }, 500);
+})();
+</script>
+</body>
+</html>
